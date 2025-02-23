@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FIT Data Records</title>
+</head>
+<body>
+    <h2>FIT Data Records</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Heart Rate</th>
+                <th>Speed</th>
+                <th>Distance</th>
+                <th>Cadence</th>
+                <th>Power</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if workouts %}
+                {% for workout in workouts %}
+                <tr>
+                    <td>{{ workout.name }}</td>
+                    <td>{{ workout.uploaded_at }}</td>
+                    <td><a href="{% url 'workout_detail' workout.id %}">View Records</a></td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="3">No workouts found!</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</body>
+</html>
