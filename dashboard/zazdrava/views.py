@@ -5,16 +5,16 @@ import pandas as pd
 from django.shortcuts import render, redirect
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-from .models import FitRecord, Workout
+from django.urls import path
+import plotly.express as px
+import plotly.io as pio
+from .models import FitRecord
 from .forms import FitUploadForm
-import json
-from django.shortcuts import get_object_or_404
 
 
-def handle_fit_file(file_path, workout_name):
-    """Extracts data from FIT file and saves it as a workout."""
+def handle_fit_file(file_path):
+    """Extracts data from FIT file and saves it to the database."""
     fit_data = fitparse.FitFile(file_path)
-    workout = Workout.objects.create(name=workout_name)
     records = []
 
     for record in fit_data.get_messages("record"):
@@ -29,20 +29,16 @@ def handle_fit_file(file_path, workout_name):
                     record_data[field.name] = field.value
 
         if timestamp:
-            records.append(
-                FitRecord(workout=workout, timestamp=timestamp, data=record_data)
-            )
+            records.append(FitRecord(timestamp=timestamp, data=record_data))
 
     FitRecord.objects.bulk_create(records)
 
 
 def upload_fit_file(request):
-    """Handles file upload and creates a workout for it."""
     if request.method == "POST":
         form = FitUploadForm(request.POST, request.FILES)
         if form.is_valid():
             uploaded_file = request.FILES["file"]
-            workout_name = uploaded_file.name  # Name the workout after the file
             file_path = default_storage.save(
                 f"fit_files/{uploaded_file.name}", ContentFile(uploaded_file.read())
             )
@@ -56,43 +52,27 @@ def upload_fit_file(request):
                 os.remove(default_storage.path(file_path))
                 file_path = decompressed_path
 
-            handle_fit_file(default_storage.path(file_path), workout_name)
+            handle_fit_file(default_storage.path(file_path))
+
             return redirect("fit_data_view")
     else:
         form = FitUploadForm()
-    return render(request, "upload.html", {"form": form})
-
-
-def workout_detail(request, workout_id):
-    """Displays details of a single workout, including a graph."""
-    workout = get_object_or_404(Workout, id=workout_id)
-
-    # Extract timestamp and key metrics (Modify based on your data)
-    records = workout.records.all().order_by("timestamp")
-    timestamps = [record.timestamp.strftime("%Y-%m-%d %H:%M:%S") for record in records]
-    altitude = [record.data.get("altitude", 0) for record in records]
-    heart_rate = [record.data.get("heart_rate", 0) for record in records]
-    speed = [record.data.get("enhanced_speed", 0) for record in records]
-
-    return render(
-        request,
-        "workout_detail.html",
-        {
-            "workout": workout,
-            "timestamps": json.dumps(timestamps),
-            "altitude": json.dumps(altitude),
-            "heart_rate": json.dumps(heart_rate),
-            "speed": json.dumps(speed),
-        },
-    )
+    return render(request, "zazdrava/upload.html", {"form": form})
 
 
 def fit_data_view(request):
-    """Displays workouts instead of individual records."""
-    workouts = Workout.objects.prefetch_related("records").all()
-    # print(workouts.count())
-    for data in workouts:
-        # print(data.records.count())
-        for record in data.records.all():
-            print(record.data)
-    return render(request, "fit_data.html", {"workouts": workouts})
+    records = FitRecord.objects.all()
+
+    # Convert QuerySet to DataFrame
+    df = pd.DataFrame.from_records(records.values())
+
+    # Ensure necessary data exists
+    if "timestamp" in df.columns and "speed" in df.columns:
+        fig = px.line(df, x="timestamp", y="speed", title="Speed Over Time")
+        chart = fig.to_html(full_html=False)
+    else:
+        chart = "<p>No sufficient data to generate chart.</p>"
+
+    return render(
+        request, "zazdrava/fit_data.html", {"records": records, "chart": chart}
+    )
