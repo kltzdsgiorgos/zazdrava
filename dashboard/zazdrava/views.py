@@ -69,28 +69,34 @@ def upload_fit_file(request):
 
 
 def fit_data_view(request):
-    """Displays workouts and their associated FIT records with charts."""
-    workouts = Workout.objects.prefetch_related("fitrecord_set").all()
-    charts = {}
+    """Display only the workout chart."""
+    workouts = Workout.objects.prefetch_related("fit_records").all()
 
+    if not workouts.exists():
+        return render(
+            request,
+            "zazdrava/fit_data.html",
+            {"charts": "<p>No workout data available.</p>"},
+        )
+
+    # Process data
+    data = []
     for workout in workouts:
-        records = workout.fitrecord_set.all()
-        if records:
-            df = pd.DataFrame.from_records(
-                [{"timestamp": r.timestamp, **r.data} for r in records]
+        for record in workout.fit_records.all():  # ✅ Corrected attribute access
+            data.append(
+                {
+                    "timestamp": record.timestamp,
+                    "speed": record.data.get("speed", 0),
+                    "workout": workout.name,
+                }
             )
 
-            if not df.empty:
-                # Create a line chart for speed vs. timestamp
-                if "speed" in df.columns:
-                    fig = px.line(
-                        df,
-                        x="timestamp",
-                        y="speed",
-                        title=f"Speed over Time - {workout.name}",
-                    )
-                    charts[workout.id] = pio.to_html(fig, full_html=False)
+    df = pd.DataFrame(data)
 
-    return render(
-        request, "zazdrava/fit_data.html", {"workouts": workouts, "charts": charts}
+    # Create the Plotly chart
+    fig = px.line(
+        df, x="timestamp", y="speed", color="workout", title="Workout Speed Over Time"
     )
+    chart_html = fig.to_html(full_html=False)
+
+    return render(request, "zazdrava/fit_data.html", {"charts": chart_html})
