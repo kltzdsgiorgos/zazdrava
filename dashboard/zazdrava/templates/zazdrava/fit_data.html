@@ -1,32 +1,53 @@
 {% extends "zazdrava/base.html" %}
-
-{% block title %}FIT Data Records{% endblock %}
+{% load filters %}
 
 {% block content %}
-<h2>FIT Data Records</h2>
+<div class="container mt-5">
+    <h2 class="text-center">Workout Data</h2>
 
-{% for workout in workouts %}
-    <div class="card mt-3">
-        <div class="card-body">
-            <h3 class="card-title">{{ workout.name }}</h3>
-            <p class="text-muted">Uploaded: {{ workout.created_at }}</p>
-            <table class="table table-bordered">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Data</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for record in workout.fitrecord_set.all %}
-                    <tr>
-                        <td>{{ record.timestamp }}</td>
-                        <td>{{ record.data }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-{% endfor %}
+    {% if workouts %}
+        {% for workout in workouts %}
+            <div class="card my-4">
+                <div class="card-header bg-primary text-white">
+                    <h4>{{ workout.name }}</h4>
+                </div>
+                <div class="card-body">
+                    {% if workout.fitrecord_set.all %}
+                        <table class="table table-bordered">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Data</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for record in workout.fitrecord_set.all %}
+                                    <tr>
+                                        <td>{{ record.timestamp }}</td>
+                                        <td>
+                                            {% for key, value in record.data.items %}
+                                                <strong>{{ key }}:</strong> {{ value }}<br>
+                                            {% endfor %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <!-- Insert Plotly Chart -->
+                        {% if charts|get_item:workout.id %}
+                            <div class="mt-4">
+                                {{ charts|get_item:workout.id|safe }}
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <p>No records available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p class="text-center">No workouts found.</p>
+    {% endif %}
+</div>
 {% endblock %}

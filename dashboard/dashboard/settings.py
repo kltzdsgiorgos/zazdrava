@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "zazdrava",
+    "zazdrava.templatetags",
 ]
 
 MIDDLEWARE = [
@@ -56,7 +57,9 @@ ROOT_URLCONF = "dashboard.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [os.path.join(BASE_DIR, "dashboard", "zazdrava", "templates")],
+        "DIRS": [
+            os.path.join(BASE_DIR, "zazdrava", "templates")  # Ensure correct path
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

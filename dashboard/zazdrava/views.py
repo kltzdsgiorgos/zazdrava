@@ -10,12 +10,16 @@ import plotly.express as px
 import plotly.io as pio
 from .models import FitRecord
 from .forms import FitUploadForm
+from .models import Workout, FitRecord
 
 
-def handle_fit_file(file_path):
-    """Extracts data from FIT file and saves it to the database."""
+def handle_fit_file(file_path, workout_name):
+    """Extracts data from FIT file and saves it to the database under a workout."""
     fit_data = fitparse.FitFile(file_path)
     records = []
+
+    # Ensure Workout exists
+    workout, created = Workout.objects.get_or_create(name=workout_name)
 
     for record in fit_data.get_messages("record"):
         record_data = {}
@@ -29,7 +33,9 @@ def handle_fit_file(file_path):
                     record_data[field.name] = field.value
 
         if timestamp:
-            records.append(FitRecord(timestamp=timestamp, data=record_data))
+            records.append(
+                FitRecord(workout=workout, timestamp=timestamp, data=record_data)
+            )
 
     FitRecord.objects.bulk_create(records)
 
@@ -39,6 +45,8 @@ def upload_fit_file(request):
         form = FitUploadForm(request.POST, request.FILES)
         if form.is_valid():
             uploaded_file = request.FILES["file"]
+            workout_name = uploaded_file.name  # Use filename as workout name
+
             file_path = default_storage.save(
                 f"fit_files/{uploaded_file.name}", ContentFile(uploaded_file.read())
             )
@@ -52,7 +60,7 @@ def upload_fit_file(request):
                 os.remove(default_storage.path(file_path))
                 file_path = decompressed_path
 
-            handle_fit_file(default_storage.path(file_path))
+            handle_fit_file(default_storage.path(file_path), workout_name)
 
             return redirect("fit_data_view")
     else:
@@ -61,18 +69,28 @@ def upload_fit_file(request):
 
 
 def fit_data_view(request):
-    records = FitRecord.objects.all()
+    """Displays workouts and their associated FIT records with charts."""
+    workouts = Workout.objects.prefetch_related("fitrecord_set").all()
+    charts = {}
 
-    # Convert QuerySet to DataFrame
-    df = pd.DataFrame.from_records(records.values())
+    for workout in workouts:
+        records = workout.fitrecord_set.all()
+        if records:
+            df = pd.DataFrame.from_records(
+                [{"timestamp": r.timestamp, **r.data} for r in records]
+            )
 
-    # Ensure necessary data exists
-    if "timestamp" in df.columns and "speed" in df.columns:
-        fig = px.line(df, x="timestamp", y="speed", title="Speed Over Time")
-        chart = fig.to_html(full_html=False)
-    else:
-        chart = "<p>No sufficient data to generate chart.</p>"
+            if not df.empty:
+                # Create a line chart for speed vs. timestamp
+                if "speed" in df.columns:
+                    fig = px.line(
+                        df,
+                        x="timestamp",
+                        y="speed",
+                        title=f"Speed over Time - {workout.name}",
+                    )
+                    charts[workout.id] = pio.to_html(fig, full_html=False)
 
     return render(
-        request, "zazdrava/fit_data.html", {"records": records, "chart": chart}
+        request, "zazdrava/fit_data.html", {"workouts": workouts, "charts": charts}
     )
